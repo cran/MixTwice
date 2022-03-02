@@ -17,10 +17,9 @@ Each row of the data (\code{rownames(peptide_data)}) is a probed length-12 pepti
 }
 \source{
 Zheng, Zihao, et al. \emph{Disordered Antigens and Epitope Overlap Between Anti Citrullinated Protein Antibodies and Rheumatoid Factor in Rheumatoid Arthritis.} \bold{Arthritis & Rheumatology} 72.2 (2020): 262-272.
-\url{https://onlinelibrary.wiley.com/doi/abs/10.1002/art.41074}
 }
 \references{
-Zheng et al. \emph{MixTwice: Large scale hypothesis testing for peptide arrays by variance mixing}. Technical Report, October 2020.
+Zheng et al. \emph{MixTwice: Large scale hypothesis testing for peptide arrays by variance mixing}. Bioinformatics, 2021.
 }
 \examples{
 

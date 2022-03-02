@@ -6,7 +6,8 @@ MixTwice deploys large-scale hypothesis testing in the case when testing units p
 estimated standard errors.  It produces empirical Bayesian local false discovery and sign rates for tests of zero effect.
 }
 \usage{
-mixtwice(thetaHat, s2, Btheta = 15, Bsigma2 = 10, df, prop = 1)
+mixtwice(thetaHat, s2, Btheta = 15, Bsigma2 = 10, df, 
+method = c("EM-pava", "AugLag"), maxit = 100, prop = 1)
 }
 \arguments{
   \item{thetaHat}{Estimated effect sizes (vector over testing units))}
@@ -14,6 +15,8 @@ mixtwice(thetaHat, s2, Btheta = 15, Bsigma2 = 10, df, prop = 1)
   \item{Btheta}{Grid size parameter for effect distribution}
   \item{Bsigma2}{Grid size parameter for variance distribution}
   \item{df}{Degrees of freedom in chisquare associated with  estimated standard error}
+  \item{method}{Method used for solving the non-parametric MLE optimization. \code{method = "EM-pava"} solves the optimization problem using EM approach with pool adjacent violator algorithm (pava) and \code{method = "EM-pava"} solves the optimization problem directly using Augmented Lagrangian approach.}
+  \item{maxit}{Number of iterations in EM if \code{method = "EM-pava"}, with default, \code{maxit = 100}}
   \item{prop}{Proportion of units randomly selected to fit the distribution, with default, \code{prop = 1} (use all units to fit the distribution).}
 }
 \details{
@@ -29,73 +32,101 @@ mixtwice(thetaHat, s2, Btheta = 15, Bsigma2 = 10, df, prop = 1)
 }
 \references{
 Zheng et al. \emph{MixTwice: Large scale hypothesis testing for peptide 
-arrays by variance mixing}. Technical Report, October 2020.
+arrays by variance mixing}. Bioinformatics, 2021.
 }
 \author{
 Zihao Zheng,  Michael A.Newton
 }
 \note{
-cite the biorxiv/arxiv paper
+See Zheng et al. 2021 for further detail
 }
-
 \seealso{
 See Also as \code{?peptide_data}
 }
 \examples{
+set.seed(1)
 
-### for a single group testing problem for zero effect
+l = 1000 ## number of testing units
 
-### basic setting, take p = 100 as an toy example
+neach = 20 ## number of subjects in each group
 
-pi = 0.5 ## true value of null proportion
+pi0 = 0.8 ## null proportion
 
-p = 100; n = 10 ## number of testing units and sample size of each unit
+signal1 = rep(0, l)
 
-p1=(1-pi)*p; p2=pi*p ## number of non-null and null
+signal2 = signal1
 
-mu=c(rnorm(round(p1), mean=0, sd=1), rep(0, round(p2)))
+signal2[1:round((1-pi0)*l)] = rnorm(round((1-pi0)*l), mean = 0, sd = 3)
 
-sd=rep(1, p)
+## I will generate the sigma^2 parameter
 
-x=NULL
+sigma2 = rep(1,l)
 
-for (i in 1:(p1+p2)) {
+sigma = sqrt(sigma2)
+
+## Then I can generate data
+
+data1 <- data2 <- matrix(NA, nrow = l, ncol = neach)
+
+for (i in 1:l) {
   
-  xx=rnorm(n, mu[i], sd[i])
+  data1[i,] = rnorm(neach, mean = rep(signal1[i], each = neach), sd = sigma[i])
+  data2[i,] = rnorm(neach, mean = rep(signal2[i], each = neach), sd = sigma[i])
   
-  x=rbind(x,xx)
 }
 
+thetaHat = rowMeans(data2) - rowMeans(data1)
 
-thetaHat = rowMeans(x) ## effect size of each testing unit
+sd1 = apply(data1, 1, sd)
+sd2 = apply(data2, 1, sd)
 
-s2 = apply(x, 1, sd)^2/n ## estimated variance of effect size
+s2 = sd1^2/neach + sd2^2/neach
 
-mm1=mixtwice(thetaHat=thetaHat, s2=s2, Btheta = 15, Bsigma2 = 10, df=n-1)
+fit.EM = mixtwice(thetaHat, s2, Btheta = 15, Bsigma2 = 10, df = 2*neach - 2,
+                   method = "EM-pava", maxit = 100, prop = 1)
 
-## summarize and visualize the result
+## you can try to visualize the result
 
-# estimated mixing distribution and true mixing distribution
-plot(mm1$grid.theta, cumsum(mm1$mix.theta), type = "s", 
+plot(fit.EM$grid.theta, cumsum(fit.EM$mix.theta), type = "s",
      xlab = "grid.theta", ylab = "ecdf of theta", lwd = 2)
-lines(ecdf(mu),cex = 0.1, lwd = 0.5, lty = 2, col = "red")
 
-plot(mm1$grid.sigma2, cumsum(mm1$mix.sigma2), type = "s",
-     xlab = "grid.sigma2", ylab = "ecdf of sigma2", lwd = 2)
+lines(ecdf(signal2 - signal1),cex = 0.1, lwd = 0.5, lty = 2, col = "red")
 
-# effect size and estimated local false discovery rate
+legend("topleft", legend = c("fit.mix", "true.mix"), col = c("black", "red"), 
+       lwd = 1, pch = 19)
 
-plot(thetaHat, mm1$lfdr, pch = ".", cex = 2, xlab = "estimated effect size", ylab = "lfdr")
+## calculate false discovery rate and true positive under 0.05
 
-# true positive and false positive rate, under the level of 0.05
+oo = order(fit.EM$lfdr)
 
-mean(mm1$lfsr[1:50]<=0.05) # true positive rate
-mean(mm1$lfsr[51:100]<=0.05) # false positive rate
+# number of discovery
 
-# null proportion estimation
+x1 = sum(cumsum(fit.EM$lfdr[oo])/c(1:l) <= 0.05)
 
-max(mm1$mix.theta)
+# number of true discovery
 
+x2 = sum(cumsum(fit.EM$lfdr[oo])/c(1:l) <= 0.05 & (signal2 != 0)[oo])
+
+# number of real positive
+
+x3 = sum(signal2 != 0) 
+
+# number of false discovery
+
+x4 = sum(cumsum(fit.EM$lfdr[oo])/c(1:l) <= 0.05 & (signal2 == 0)[oo]) 
+
+x4/x1 ## false discovery rate FDR
+
+x2/x3 ## true positive rate
+
+## null proportion estimation
+
+max(fit.EM$mix.theta)
+
+## you can also try using another method (Augmented Lagrangian), the result would be similar
+
+# fit.AugLag = mixtwice2(thetaHat, s2, Btheta = 15, Bsigma2 = 10, df = 2*neach - 2,
+#                        method = "AugLag", prop = 1)
 }
 \keyword{High density peptide array}
 \keyword{Large-scale hypothesis testing}
